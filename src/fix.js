@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { detectSecrets, broadRule } from './detect.js';
 import { loadSettings, serialize, LISTS } from './settings.js';
 
@@ -12,16 +14,23 @@ export function safePrefix(rule) {
   return `Bash(${m[1]}:*)`;
 }
 
+export function backupDir() {
+  const base = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
+  return path.join(base, 'allowlist-guard', 'backups');
+}
+
+// Backups live outside any repo so the secret they hold cannot be committed.
 function backupName(file) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `${file}.${stamp}.bak`;
+  const safe = path.resolve(file).replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+/, '');
+  return path.join(backupDir(), `${safe}-${stamp}.json`);
 }
 
 /**
  * Remove (or rewrite) rules containing secrets.
  * @returns {{file, removed:number, rewritten:number, backup:string|null}}
  */
-export function fixFile(file, { rewrite = false, includeLow = false, dryRun = false } = {}) {
+export function fixFile(file, { rewrite = false, includeLow = false, dryRun = false, backup = true } = {}) {
   const { data, format } = loadSettings(file);
   const perms = data.permissions;
   const out = { file, removed: 0, rewritten: 0, backup: null };
@@ -52,9 +61,13 @@ export function fixFile(file, { rewrite = false, includeLow = false, dryRun = fa
 
   const original = fs.readFileSync(file);
   const mode = fs.statSync(file).mode & 0o777;
-  out.backup = backupName(file);
-  fs.writeFileSync(out.backup, original, { mode: 0o600, flag: 'wx' });
-  fs.chmodSync(out.backup, 0o600);
+  if (backup) {
+    out.backup = backupName(file);
+    fs.mkdirSync(path.dirname(out.backup), { recursive: true, mode: 0o700 });
+    fs.chmodSync(path.dirname(out.backup), 0o700);
+    fs.writeFileSync(out.backup, original, { mode: 0o600, flag: 'wx' });
+    fs.chmodSync(out.backup, 0o600);
+  }
 
   const tmp = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, serialize(data, format), { mode });

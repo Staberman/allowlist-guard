@@ -43,11 +43,11 @@ export function writeSettings(dir, rules, { indent = 2, name = 'settings.local.j
 
 const BIN = path.join(ROOT, 'bin/allowlist-guard.js');
 
-export function run(args, { cwd, home } = {}) {
+export function run(args, { cwd, home, state } = {}) {
   const r = spawnSync(process.execPath, [BIN, ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, HOME: home || cwd || os.tmpdir() },
+    env: { ...process.env, HOME: home || cwd || os.tmpdir(), XDG_STATE_HOME: state || path.join(os.tmpdir(), 'alg-state') },
   });
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 }

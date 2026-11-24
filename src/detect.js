@@ -1,6 +1,24 @@
 // Secret and broad-rule detection for a single permission rule string.
 // Pure functions, no I/O.
 
+const DEV_DEFAULTS = new Set([
+  'postgres:postgres', 'root:root', 'user:password', 'admin:admin', 'root:password',
+]);
+
+function isLoopback(host) {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  return h === 'localhost' || h === '::1' || h === '0.0.0.0' || /^127\.\d+\.\d+\.\d+$/.test(h);
+}
+
+// URL credentials on a loopback host, or well-known dev defaults, are low severity.
+function localDevCredential(m) {
+  const [, user, pass, host] = m;
+  if (isLoopback(host) || DEV_DEFAULTS.has(`${user}:${pass}`.toLowerCase())) {
+    return { type: 'local-dev-credential', confidence: 'low' };
+  }
+  return null;
+}
+
 const PLACEHOLDER = /^(?:[$<{(*%]|\.\.\.|x{3,}|changeme|your[_-]|example|redacted)/i;
 
 // Ordered by confidence. Earlier matches win when ranges overlap.
@@ -41,7 +59,12 @@ const PATTERNS = [
     re: /\b(?:password|passwd|pwd|token|secret|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|client[_-]?secret)\s*=\s*\\?["']?([^\s"'\\&;]{4,})/gi,
     group: 1,
   },
-  { type: 'url-credentials', re: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@"'\\]+:([^\s@/"'\\]+)@/gi, group: 1 },
+  {
+    type: 'url-credentials',
+    re: /\b[a-z][a-z0-9+.-]*:\/\/([^\s:/@"'\\]+):([^\s@/"'\\]+)@(\[[0-9a-f:]+\]|[^\s:/"'\\?#]+)/gi,
+    group: 2,
+    classify: localDevCredential,
+  },
 ];
 
 for (const p of PATTERNS) p.re = new RegExp(p.re.source, p.re.flags + 'd');
@@ -71,14 +94,15 @@ function overlaps(found, start, end) {
  */
 export function detectSecrets(rule) {
   const found = [];
-  for (const { type, re, group = 0 } of PATTERNS) {
+  for (const { type, re, group = 0, classify } of PATTERNS) {
     for (const m of rule.matchAll(re)) {
       const value = m[group];
       if (!value || PLACEHOLDER.test(value)) continue;
       const start = m.indices[group][0];
       const end = start + value.length;
       if (overlaps(found, start, end)) continue;
-      found.push({ type, confidence: 'high', start, end, value });
+      const c = classify ? classify(m) : null;
+      found.push({ type: c ? c.type : type, confidence: c ? c.confidence : 'high', start, end, value });
     }
   }
   // Conservative fallback: long mixed-case tokens with digits and high entropy.

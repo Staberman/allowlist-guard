@@ -59,7 +59,8 @@ test('fix: removes secret rules, backs up at 0600, keeps formatting and other ke
     const dir = tempDir();
     const file = writeSettings(dir, leaky(), { indent });
     const before = fs.readFileSync(file, 'utf8');
-    const r = run(['fix'], { cwd: dir });
+    const state = tempDir();
+    const r = run(['fix'], { cwd: dir, state });
     assert.equal(r.code, 0);
     assert.match(r.stdout, /[Rr]otate/);
     assert.match(r.stdout, /git log/);
@@ -74,9 +75,13 @@ test('fix: removes secret rules, backs up at 0600, keeps formatting and other ke
       indent,
     );
     assert.equal(fs.readFileSync(file, 'utf8'), expected + '\n');
-    const baks = fs.readdirSync(path.dirname(file)).filter((n) => n.endsWith('.bak'));
+    assert.deepEqual(fs.readdirSync(path.dirname(file)), [path.basename(file)], 'no backup next to the file');
+    const bdir = path.join(state, 'allowlist-guard', 'backups');
+    const baks = fs.readdirSync(bdir);
     assert.equal(baks.length, 1);
-    const bak = path.join(path.dirname(file), baks[0]);
+    assert.ok(r.stdout.includes(path.join(bdir, baks[0])), 'backup path printed');
+    assert.equal(fs.statSync(bdir).mode & 0o777, 0o700);
+    const bak = path.join(bdir, baks[0]);
     assert.equal(fs.statSync(bak).mode & 0o777, 0o600);
     assert.equal(fs.readFileSync(bak, 'utf8'), before);
     assert.equal(run(['scan'], { cwd: dir }).code, 0);
@@ -153,4 +158,33 @@ test('install-hook does not touch an existing foreign hook', () => {
   assert.equal(r.code, 0);
   assert.match(r.stdout, /allowlist-guard scan --staged/);
   assert.equal(fs.readFileSync(hook, 'utf8'), '#!/bin/sh\necho mine\n');
+});
+
+test('fix --no-backup writes no backup', () => {
+  const dir = tempDir();
+  const state = tempDir();
+  writeSettings(dir, leaky());
+  assert.equal(run(['fix', '--no-backup'], { cwd: dir, state }).code, 0);
+  assert.ok(!fs.existsSync(path.join(state, 'allowlist-guard')));
+});
+
+test('loopback and dev-default URL credentials are low severity; remote hosts still fail', () => {
+  const pw = fakes.password;
+  const dir = tempDir();
+  writeSettings(dir, [
+    'Bash(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres")',
+    `Bash(psql "postgresql://app:${pw}@localhost/db")`,
+    `Bash(psql "postgresql://app:${pw}@[::1]/db")`,
+  ]);
+  const r = run(['scan'], { cwd: dir });
+  assert.equal(r.code, 0);
+  assert.match(r.stdout, /local-dev-credential/);
+  assert.equal(run(['scan', '--include-low'], { cwd: dir }).code, 1);
+
+  const remote = tempDir();
+  writeSettings(remote, [`Bash(psql "postgresql://app:${pw}@db.example.com/db")`]);
+  assert.equal(run(['scan'], { cwd: remote }).code, 1);
+  const remoteDefault = tempDir();
+  writeSettings(remoteDefault, [`Bash(psql "postgresql://postgres:postgres@db.example.com/db")`]);
+  assert.equal(run(['scan'], { cwd: remoteDefault }).code, 0);
 });

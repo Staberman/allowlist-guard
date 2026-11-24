@@ -6,8 +6,8 @@ import { installHook, stagedSources, SNIPPET } from './hook.js';
 const HELP = `allowlist-guard - find secrets saved in Claude Code permission rules
 
 Usage:
-  allowlist-guard scan [paths...] [--json] [--strict] [--staged]
-  allowlist-guard fix [paths...] [--rewrite] [--include-low] [--dry-run]
+  allowlist-guard scan [paths...] [--json] [--strict] [--staged] [--include-low]
+  allowlist-guard fix [paths...] [--rewrite] [--include-low] [--dry-run] [--no-backup]
   allowlist-guard install-hook
 
 Default paths: ./.claude/settings*.json and ~/.claude/settings.json
@@ -15,6 +15,9 @@ A directory path means <dir>/.claude/settings*.json.
 
 Exit codes: 0 clean, 1 secrets found, 2 error (unreadable file, bad usage).
 --strict also exits 1 when broad-rule warnings exist.
+Low-confidence findings (entropy, local dev credentials) are listed but only
+fail scan with --include-low.
+Backups from fix go to $XDG_STATE_HOME/allowlist-guard/backups (default ~/.local/state), outside the repo.
 `;
 
 const out = (s) => process.stdout.write(s + '\n');
@@ -55,7 +58,7 @@ function printScan(r) {
 
 function cmdScan(argv) {
   const { flags, paths } = parseArgs(argv);
-  checkFlags(flags, ['--json', '--strict', '--staged']);
+  checkFlags(flags, ['--json', '--strict', '--staged', '--include-low']);
   const sources = flags.has('--staged')
     ? stagedSources(process.cwd())
     : discover(paths).map((file) => ({ file }));
@@ -70,18 +73,20 @@ function cmdScan(argv) {
       ),
     );
   } else printScan(r);
-  if (r.findings.length) return 1;
+  const failing = flags.has('--include-low') ? r.findings : r.findings.filter((f) => f.confidence === 'high');
+  if (failing.length) return 1;
   if (flags.has('--strict') && r.warnings.length) return 1;
   return r.errors.length ? 2 : 0;
 }
 
 function cmdFix(argv) {
   const { flags, paths } = parseArgs(argv);
-  checkFlags(flags, ['--rewrite', '--include-low', '--dry-run']);
+  checkFlags(flags, ['--rewrite', '--include-low', '--dry-run', '--no-backup']);
   const opts = {
     rewrite: flags.has('--rewrite'),
     includeLow: flags.has('--include-low'),
     dryRun: flags.has('--dry-run'),
+    backup: !flags.has('--no-backup'),
   };
   let changed = 0;
   let failed = false;
@@ -92,7 +97,7 @@ function cmdFix(argv) {
       changed++;
       const verb = opts.dryRun ? 'would change' : 'changed';
       out(`${verb} ${file}: ${r.removed} rule(s) removed, ${r.rewritten} rewritten to a prefix`);
-      if (r.backup) out(`  backup (0600, still contains the secrets): ${r.backup}`);
+      if (r.backup) out(`  backup (0600, outside the repo, still contains the secrets): ${r.backup}`);
     } catch (e) {
       failed = true;
       err(`error  ${file}: ${e.code === 'ENOENT' ? 'file not found' : e.message}`);
@@ -102,7 +107,7 @@ function cmdFix(argv) {
   else {
     out(`
 Rotate every credential that was in those rules. Removing it from the file does not un-leak it.
-Delete the .bak file(s) once you no longer need them, and do not commit them.
+Delete the backup file(s) once you no longer need them.
 Check git history for copies:
   git log --all --oneline -p -S'<first characters of the secret>' -- <settings file>`);
     if (opts.rewrite) out('Note: --rewrite grants every use of that command, which is broader than the original rule.');
