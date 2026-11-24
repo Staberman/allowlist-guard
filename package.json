@@ -1,0 +1,14 @@
+{
+  "name": "allowlist-guard",
+  "version": "0.1.0",
+  "description": "Find and remove secrets saved in Claude Code permission rules (settings.json, settings.local.json).",
+  "type": "module",
+  "bin": { "allowlist-guard": "bin/allowlist-guard.js" },
+  "files": ["bin", "src", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test test/*.test.js" },
+  "keywords": ["claude-code", "secrets", "permissions", "settings", "security", "pre-commit"],
+  "license": "MIT",
+  "author": "Staberman <redes@staberman.com.ar>",
+  "repository": { "type": "git", "url": "git+https://github.com/Staberman/allowlist-guard.git" }
+}
