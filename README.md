@@ -85,8 +85,8 @@ Secrets (exit code 1):
 - URLs with `user:pass@`.
 - Low confidence, labeled as such, listed but not failing by default: long
   mixed-case tokens with digits and high entropy, and "local dev credentials"
-  (URL passwords on localhost, 127.0.0.0/8, ::1 or 0.0.0.0, or defaults such as
-  `postgres:postgres`). `scan --include-low` fails on them and `fix` leaves them
+  (URL passwords on localhost, 127.0.0.0/8, ::1 or 0.0.0.0). Default passwords
+  on a remote host are not downgraded. `scan --include-low` fails on them and `fix` leaves them
   alone unless you pass `--include-low`.
 
 Values that start with `$`, `<`, `{` or `*` (`$TOKEN`, `<token>`) are treated as
