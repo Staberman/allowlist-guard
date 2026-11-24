@@ -1,19 +1,16 @@
 // Secret and broad-rule detection for a single permission rule string.
 // Pure functions, no I/O.
 
-const DEV_DEFAULTS = new Set([
-  'postgres:postgres', 'root:root', 'user:password', 'admin:admin', 'root:password',
-]);
-
 function isLoopback(host) {
   const h = host.toLowerCase().replace(/^\[|\]$/g, '');
   return h === 'localhost' || h === '::1' || h === '0.0.0.0' || /^127\.\d+\.\d+\.\d+$/.test(h);
 }
 
-// URL credentials on a loopback host, or well-known dev defaults, are low severity.
+// URL credentials on a loopback host are low severity. A remote host is not,
+// even with default credentials: a reachable server with a default password is a real leak.
 function localDevCredential(m) {
-  const [, user, pass, host] = m;
-  if (isLoopback(host) || DEV_DEFAULTS.has(`${user}:${pass}`.toLowerCase())) {
+  const host = m[3];
+  if (isLoopback(host)) {
     return { type: 'local-dev-credential', confidence: 'low' };
   }
   return null;

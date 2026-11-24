@@ -168,7 +168,7 @@ test('fix --no-backup writes no backup', () => {
   assert.ok(!fs.existsSync(path.join(state, 'allowlist-guard')));
 });
 
-test('loopback and dev-default URL credentials are low severity; remote hosts still fail', () => {
+test('loopback URL credentials are low severity; remote hosts still fail, even with default credentials', () => {
   const pw = fakes.password;
   const dir = tempDir();
   writeSettings(dir, [
@@ -186,5 +186,5 @@ test('loopback and dev-default URL credentials are low severity; remote hosts st
   assert.equal(run(['scan'], { cwd: remote }).code, 1);
   const remoteDefault = tempDir();
   writeSettings(remoteDefault, [`Bash(psql "postgresql://postgres:postgres@db.example.com/db")`]);
-  assert.equal(run(['scan'], { cwd: remoteDefault }).code, 0);
+  assert.equal(run(['scan'], { cwd: remoteDefault }).code, 1);
 });

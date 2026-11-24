@@ -15,7 +15,9 @@ that value is now sitting in plain text:
 
 CSO Online and InfoWorld reported in November 2026 that the "don't ask again"
 approvals store commands, secrets included, in settings files that end up in
-public repos:
+public repos. GitGuardian, cited by CSO Online, found 31,088 distinct secrets in
+`.claude/settings.local.json` files across 23,276 public GitHub repositories, and
+5,343 of them were still valid when detected.
 
 - CSO Online: https://www.csoonline.com/article/4247336/claude-codes-dont-ask-again-button-has-a-secrets-spilling-problem.html
 - InfoWorld: https://www.infoworld.com/article/4247344/claude-codes-dont-ask-again-button-has-a-secrets-spilling-problem.html
